@@ -1,0 +1,49 @@
+"""
+Vehicle detection + multi-object tracking.
+
+Uses Ultralytics YOLOv8 pretrained on COCO. COCO class ids we care about:
+    2 = car, 3 = motorcycle (bike), 5 = bus, 7 = truck
+
+YOLOv8's `.track()` method has ByteTrack / BoT-SORT built in, so we don't
+need a separate DeepSORT install to get stable track IDs.
+"""
+from ultralytics import YOLO
+
+COCO_VEHICLE_CLASSES = {2: "car", 3: "bike", 5: "bus", 7: "truck"}
+
+
+class VehicleDetector:
+    def __init__(self, model_path: str = "yolov8n.pt", conf: float = 0.35, tracker: str = "bytetrack.yaml"):
+        """
+        model_path: path or name of a YOLOv8 weight file.
+                    'yolov8n.pt' auto-downloads from Ultralytics on first run
+                    (needs internet). Swap for a larger model (yolov8s.pt /
+                    yolov8m.pt) for better accuracy at the cost of speed.
+        tracker:    'bytetrack.yaml' (fast, no re-id) or 'botsort.yaml'
+                    (slower, more robust re-identification).
+        """
+        self.model = YOLO(model_path)
+        self.conf = conf
+        self.tracker = tracker
+
+    def track_stream(self, source, imgsz=640, stream=True):
+        """
+        Yields ultralytics Results objects, one per frame, with .boxes.id
+        populated (track IDs) as long as detections persist across frames.
+        """
+        results = self.model.track(
+            source=source,
+            conf=self.conf,
+            classes=list(COCO_VEHICLE_CLASSES.keys()),
+            tracker=self.tracker,
+            persist=True,
+            stream=stream,
+            imgsz=imgsz,
+            verbose=False,
+        )
+        for r in results:
+            yield r
+
+    @staticmethod
+    def class_name(cls_id: int) -> str:
+        return COCO_VEHICLE_CLASSES.get(int(cls_id), "vehicle")
